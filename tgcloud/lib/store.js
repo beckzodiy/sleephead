@@ -8,7 +8,7 @@ export async function touchUser(u) {
   const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || null
   await db.insert(users)
     .values({ tgId: u.id, name, lang: u.language_code || null })
-    .onConflictDoUpdate({ target: users.tgId, set: { name, lang: u.language_code || null, lastSeen: sql`(unixepoch())` } })
+    .onConflictDoUpdate({ target: users.tgId, set: { name, lang: u.language_code || null, lastSeen: sql`(unixepoch())`, blocked: 0 } })
 }
 
 export async function getList(tgId) {

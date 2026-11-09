@@ -80,7 +80,10 @@
     <button id="morningBtn" data-go="morning" style="display:none">Last night's list</button>
   </div>
   <div class="grow"></div>
-  <button class="plain" data-go="settings">dimmer · settings</button>
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <button class="plain" data-go="settings">dimmer · settings</button>
+    <button class="plain" id="supportBtn" style="display:none">⭐ support</button>
+  </div>
 </section>
 
 <!-- BRAIN DUMP -->
@@ -151,15 +154,15 @@
 <section class="screen" id="sheep">
   <div class="top"><h2>Count sheep</h2><button class="plain" data-stop>stop</button></div>
   <div id="sheepSetup">
-    <p>Sheep jump the fence at random times, and the gaps slowly get longer. Just wait for the next one. You don't need to watch: each jump has a soft tap and a quiet count.</p>
+    <p>Sheep jump the fence at random times, and the gaps slowly get longer. Just wait for the next one. You don't need to watch or count: each jump has a soft tap and a quiet sound.</p>
     <label>Length</label>
     <div class="row" id="sheepLenRow">
       <button data-v="15">15 min</button>
       <button data-v="30" class="sel">30 min</button>
     </div>
-    <label>Count out loud</label>
+    <label>Sound on each jump</label>
     <div class="row" id="sheepVoiceRow">
-      <button data-v="on" class="sel">Whisper</button>
+      <button data-v="on" class="sel">Soft bell</button>
       <button data-v="off">Silent</button>
     </div>
     <label>Soft noise underneath</label>
@@ -178,7 +181,6 @@
         <path d="M6 52V8M38 52V8M2 20h40M2 36h40"/>
       </svg>
     </div>
-    <div class="count" id="sheepCount"></div>
   </div>
 </section>
 
@@ -221,6 +223,19 @@
   <div class="top"><h2>Last night's list</h2><button class="plain" data-back>close</button></div>
   <div class="list" id="morningList"></div>
   <button id="clearList">Clear list</button>
+</section>
+
+<!-- SUPPORT -->
+<section class="screen" id="support">
+  <div class="top"><h2>Support Sleepyhead</h2><button class="plain" data-back>close</button></div>
+  <p>Sleepyhead is free with no ads. If it helped you sleep, you can tip with Telegram Stars.</p>
+  <div class="menu" id="starRow">
+    <button data-v="25">⭐ 25<small>A cup of tea</small></button>
+    <button data-v="100">⭐ 100<small>A good night's sleep</small></button>
+    <button data-v="250">⭐ 250<small>A week of good nights</small></button>
+    <button data-v="1000">⭐ 1000<small>Keeps the sheep jumping</small></button>
+  </div>
+  <p id="supportMsg" style="margin-top:18px;min-height:24px"></p>
 </section>
 
 <!-- SETTINGS -->
@@ -626,7 +641,18 @@ const SHEEP_SVG = `<svg viewBox="0 0 64 48" fill="none" stroke="currentColor" st
   <ellipse cx="50" cy="20" rx="6" ry="5"/><path d="M46 16l-2-3M54 16l2-3"/>
   <path class="lg" d="M20 33v9M27 34v9M35 34v9M41 33v9"/>
 </svg>`;
-let sheepN = 0;
+/* Soft, low two-partial bell: no words, no numbers, nothing to keep track of. */
+function bell(vol) {
+  if (!ctx || !master) return;
+  const t = ctx.currentTime, f = 392 * (0.9 + Math.random() * 0.2);
+  [[f, 0.25], [f * 2.01, 0.06]].forEach(([fr, v]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = fr;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v * vol, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 3);
+  });
+}
 function sheepGap(progress) {
   // Unpredictable gaps that stretch out as the session goes on: ~3–9 s early, ~10–40 s late.
   const base = 3 + 12 * progress * progress;
@@ -654,10 +680,7 @@ function jumpSheep(speak, vol) {
   intervalIds.push(setTimeout(() => tap("light"), tTake));
   intervalIds.push(setTimeout(() => {
     tap("soft");
-    sheepN++;
-    const c = $("#sheepCount"); c.style.opacity = 0;
-    setTimeout(() => { c.textContent = sheepN; c.style.opacity = 1; }, 300);
-    if (speak) say(String(sheepN), vol);
+    if (speak) bell(vol);
   }, tLand));
   anim.onfinish = () => el.remove();
 }
@@ -666,7 +689,6 @@ function startSheep(minutes, speak, bed) {
   stopAll();
   newMaster(0.15); holdWake(); markSession("sheep", minutes);
   if (bed !== "none") playNoise(bed, master);
-  sheepN = 0; $("#sheepCount").textContent = "";
   $("#sheepSetup").style.display = "none"; $("#sheepRun").style.display = "flex";
   const field = $("#field"); field.style.transition = "none"; field.style.opacity = 1;
   requestAnimationFrame(() => { field.style.transition = ""; field.style.opacity = 0.35; });  // slowly dims over 60 s
@@ -676,7 +698,7 @@ function startSheep(minutes, speak, bed) {
     const el = (Date.now() - t0) / 1000;
     if (el > total - 10) return;
     const vol = el > total - fade ? Math.max(0.1, (total - el) / fade) : 1;
-    jumpSheep(speak, vol * 0.8);
+    jumpSheep(speak, vol);
     intervalIds.push(setTimeout(next, sheepGap(Math.min(el / total, 1)) * 1000));
   };
   intervalIds.push(setTimeout(next, 2500));
@@ -712,6 +734,21 @@ $('[data-go="morning"]').addEventListener("click", () => {
   const l = store.get("list", null); $("#morningList").textContent = l ? l.text : "";
 });
 $("#clearList").onclick = () => { store.set("list", null); cloud("clearList"); back(); };
+
+/* ---------- SUPPORT (Telegram Stars) ---------- */
+if (tg && tg.initData && tg.openInvoice) $("#supportBtn").style.display = "";
+$("#supportBtn").onclick = () => { $("#supportMsg").textContent = ""; go("support"); };
+$("#starRow").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const msg = $("#supportMsg"); msg.textContent = "Opening payment…";
+  const r = await cloud("createInvoice", { amount: +b.dataset.v });
+  if (!r || !r.link) { msg.textContent = "Payment isn't available right now. Try /support in the bot chat."; return; }
+  tg.openInvoice(r.link, status => {
+    if (status === "paid") { tap("success"); msg.textContent = "Thank you. Sleep well 🌙"; }
+    else if (status === "failed") msg.textContent = "Payment didn't go through. You weren't charged.";
+    else msg.textContent = "";
+  });
+});
 
 /* ---------- start ---------- */
 const last = store.get("lastSession", 0), since = Date.now() - last;

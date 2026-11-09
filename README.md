@@ -16,6 +16,12 @@ A Telegram bot and Mini App that help you fall asleep. It runs on **Telegram Ser
 - `/start`: welcome message, an Open button and a menu button next to the message field
 - Any plain text you send is added to your list (a brain dump by chat). Every reply is silent.
 - `/list`, `/clear`, `/stats` (sessions in the last 7 days), `/sleep`, `/help`
+- `/support`: tip with Telegram Stars (25 / 100 / 250 / 1000 ⭐). The Mini App also has a ⭐ support button. `/paysupport` explains how payment help and refunds work.
+
+**Admin** (ID set in `tgcloud/lib/config.js`):
+- `/admin`: user and tip counts
+- `/broadcast <text>`, or reply to any message with `/broadcast`. The bot shows a preview, then waits for **Send**. It sends in batches of 150; tap **Continue** for the next batch. Users who blocked the bot are skipped from then on.
+- `/tips`, `/refund <user_id> <charge_id>`
 
 ## Layout
 
@@ -33,7 +39,7 @@ tgcloud/lib/             config, db helpers, keyboards and texts
 npm install
 npx tgcloud login        # paste the CLI token from BotFather → @SleepyBed_Bot → Serverless → CLI Access
 npx tgcloud push         # deploys the bot code and the Mini App
-npx tgcloud migrate      # creates the tables (first time, and after schema changes)
+npx tgcloud migrate      # creates or updates the tables (run after every schema change)
 ```
 
 Then, in BotFather → @SleepyBed_Bot → Bot Settings → Configure Mini App, set the URL to

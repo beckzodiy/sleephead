@@ -8,6 +8,7 @@ export const mainKeyboard = () => ({
     [openButton()],
     [openButton('🐑 Count sheep', '#sheep'), openButton('🌬 Breathe', '#breathe')],
     [{ text: '📝 My list', callback_data: 'list' }, { text: '❓ Help', callback_data: 'help' }],
+    [{ text: '⭐ Support the project', callback_data: 'support' }],
   ],
 })
 
@@ -35,5 +36,13 @@ export const HELP = `<b>Commands</b>
 /list: show your list
 /clear: clear your list
 /stats: your last 7 nights
+/support: tip with Telegram Stars ⭐
 
 Any other message is added to your list. Write it, then put the phone down.`
+
+export const ADMIN_HELP = `<b>Admin commands</b>
+/admin: user and tip counts
+/broadcast &lt;text&gt;: send text to all users
+Reply to any message (photo, video, text…) with /broadcast to send that message
+/tips: last 15 tips with charge IDs
+/refund &lt;user_id&gt; &lt;charge_id&gt;: refund a tip`
