@@ -1,0 +1,8 @@
+{
+  // The Mini App (single file) is hosted by Telegram from ./public
+  // at https://app8749832663.tgcloud.ai/
+  "static": {
+    "source": "public"
+  },
+  "$schema": "./node_modules/@tgcloud/cli/schema/tgcloud.json"
+}

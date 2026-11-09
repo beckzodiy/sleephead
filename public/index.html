@@ -383,7 +383,19 @@ $("#blank").addEventListener("click", () => {
 });
 
 /* ---------- session bookkeeping (for can't-sleep detection) ---------- */
-function markSession() { store.set("lastSession", Date.now()); }
+function markSession(kind, minutes) {
+  store.set("lastSession", Date.now());
+  if (kind) cloud("logSession", { kind, minutes: minutes || 0 });
+}
+/* Backend calls (Telegram Serverless). Silently does nothing outside Telegram. */
+function cloud(name, input) {
+  return new Promise(res => {
+    try {
+      if (tg && tg.Serverless && tg.initData) tg.Serverless.call(name, input || {}, (err, r) => res(err ? null : r));
+      else res(null);
+    } catch (e) { res(null); }
+  });
+}
 
 /* ---------- audio engine ---------- */
 let onEnd = null, ctx = null, master = null, sources = [], endTimer = null, intervalIds = [];
@@ -487,7 +499,7 @@ $('[data-go="flow"]').addEventListener("click", startDump);
 $("#dumpDone").onclick = () => {
   clearTimeout(dumpTimer);
   const t = $("#dumpText").value.trim();
-  if (t) store.set("list", { text: t, at: Date.now() });
+  if (t) { store.set("list", { text: t, at: Date.now() }); cloud("saveList", { body: t }); markSession("dump", 5); }
   $("#dumpText").blur(); tap("success");
   if (flow) { go("breathe"); } else { go("home", false); history = []; }
 };
@@ -499,7 +511,7 @@ function setOrb(scale, sec) { orb.style.transitionDuration = sec + "s"; orb.styl
 $("#breatheStart").onclick = () => startBreathe(getPattern(), +getBreathLen());
 function startBreathe(pattern, minutes) {
   stopAll();
-  newMaster(0.25); holdWake(); markSession();
+  newMaster(0.25); holdWake(); markSession("breathe", minutes);
   $("#breatheSetup").style.display = "none"; $("#breatheRun").style.display = "flex";
   breatheRunning = true;
   const t0 = Date.now(), total = minutes * 60;
@@ -580,7 +592,7 @@ function say(text, vol) {
 $("#shuffleStart").onclick = () => startShuffle(getShuffleMode(), +getShuffleLen(), getShuffleBed());
 function startShuffle(mode, minutes, bed) {
   stopAll();
-  newMaster(0.15); holdWake(); markSession();
+  newMaster(0.15); holdWake(); markSession("shuffle", minutes);
   if (bed !== "none") playNoise(bed, master);
   $("#shuffleSetup").style.display = "none"; $("#shuffleRun").style.display = "flex";
   const total = minutes * 60, fade = 5 * 60, t0 = Date.now();
@@ -652,7 +664,7 @@ function jumpSheep(speak, vol) {
 $("#sheepStart").onclick = () => startSheep(+getSheepLen(), getSheepVoice() === "on", getSheepBed());
 function startSheep(minutes, speak, bed) {
   stopAll();
-  newMaster(0.15); holdWake(); markSession();
+  newMaster(0.15); holdWake(); markSession("sheep", minutes);
   if (bed !== "none") playNoise(bed, master);
   sheepN = 0; $("#sheepCount").textContent = "";
   $("#sheepSetup").style.display = "none"; $("#sheepRun").style.display = "flex";
@@ -674,7 +686,7 @@ function startSheep(minutes, speak, bed) {
 $("#soundStart").onclick = () => {
   stopAll();
   const type = getSound(), mins = +getSoundLen(), vol = +$("#vol").value;
-  newMaster(vol); holdWake(); markSession();
+  newMaster(vol); holdWake(); markSession("sound", mins);
   type === "drone" ? playDrone(master) : playNoise(type, master);
   if (mins) scheduleFade(mins * 60, 10 * 60);
   $("#blank").classList.add("on"); // straight to dark
@@ -690,14 +702,24 @@ function refreshHome() {
   const l = store.get("list", null);
   $("#morningBtn").style.display = l && l.text ? "" : "none";
 }
+/* Pull the list from the bot (it may have been texted to the bot chat). */
+cloud("getList").then(r => {
+  if (!r) return;
+  store.set("list", r.body ? { text: r.body, at: (r.updated || 0) * 1000 } : null);
+  if (current === "home") refreshHome();
+});
 $('[data-go="morning"]').addEventListener("click", () => {
   const l = store.get("list", null); $("#morningList").textContent = l ? l.text : "";
 });
-$("#clearList").onclick = () => { store.set("list", null); back(); };
+$("#clearList").onclick = () => { store.set("list", null); cloud("clearList"); back(); };
 
 /* ---------- start ---------- */
 const last = store.get("lastSession", 0), since = Date.now() - last;
-if (last && since > 20 * 60000 && since < 6 * 3600000) go("cantsleep"); else go("home");
+/* Deep links from the bot: #sheep, #breathe, #shuffle, #sound, #dump (or startapp=sheep) */
+const startParam = ((tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || location.hash.slice(1) || "").toLowerCase();
+const DEEP = { sheep: "sheep", breathe: "breathe", shuffle: "shuffle", sound: "sound", sounds: "sound", dump: "dump" };
+if (DEEP[startParam]) { history = ["home"]; if (DEEP[startParam] === "dump") startDump(); go(DEEP[startParam], false); }
+else if (last && since > 20 * 60000 && since < 6 * 3600000) go("cantsleep"); else go("home");
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && ctx && ctx.state === "suspended" && master) ctx.resume();
