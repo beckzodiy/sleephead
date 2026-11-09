@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Sleepyhead</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Red-only palette: blue and green channels stay at 0 to avoid melanopic light. */
+  :root{
+    --dim:.85;
+    --red:rgba(255,0,0,var(--dim));
+    --red-soft:rgba(255,0,0,calc(var(--dim)*.72));
+    --red-faint:rgba(255,0,0,calc(var(--dim)*.38));
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{background:#000;color:var(--red);height:100%;overflow:hidden}
+  body{font:17px/1.5 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;user-select:none;-webkit-user-select:none}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;
+    /* In Telegram fullscreen, content must clear the phone notch AND Telegram's floating close/menu buttons */
+    padding-top:max(24px,env(safe-area-inset-top),calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px) + 12px));
+    padding-bottom:max(24px,env(safe-area-inset-bottom),calc(var(--tg-safe-area-inset-bottom,0px) + var(--tg-content-safe-area-inset-bottom,0px) + 12px));
+    padding-left:max(20px,env(safe-area-inset-left),var(--tg-safe-area-inset-left,0px));
+    padding-right:max(20px,env(safe-area-inset-right),var(--tg-safe-area-inset-right,0px));opacity:0;transition:opacity 1.2s ease}
+  .screen.on{display:flex}
+  .screen.show{opacity:1}
+  h1{font-weight:500;font-size:28px;letter-spacing:.04em;margin-bottom:6px}
+  h2{font-weight:500;font-size:22px;margin-bottom:12px}
+  p,.hint{color:var(--red-soft);font-size:16px}
+  .grow{flex:1}
+  .menu{display:flex;flex-direction:column;gap:12px;margin-top:28px}
+  button,.btn{background:none;border:1px solid var(--red-faint);color:var(--red);font:inherit;border-radius:14px;padding:16px 18px;text-align:left;cursor:pointer;width:100%}
+  button small{display:block;color:var(--red-soft);font-size:15px;margin-top:2px}
+  button.big{font-size:20px;padding:22px 18px;border-color:var(--red-soft)}
+  button.plain{border:none;padding:10px 0;color:var(--red-soft);width:auto}
+  .row{display:flex;gap:10px}
+  .row button{text-align:center;padding:12px 6px}
+  .row button.sel{border-color:var(--red);background:rgba(255,0,0,calc(var(--dim)*.12))}
+  textarea{flex:1;background:#000;border:1px solid var(--red-faint);border-radius:14px;color:var(--red);font:inherit;padding:14px;resize:none;outline:none;margin:12px 0;caret-color:var(--red);user-select:text;-webkit-user-select:text}
+  textarea::placeholder{color:var(--red-faint)}
+  .center{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px}
+  .orb{width:46vmin;height:46vmin;max-width:260px;max-height:260px;border-radius:50%;border:1px solid var(--red-soft);background:radial-gradient(circle,rgba(255,0,0,calc(var(--dim)*.25)) 0%,rgba(0,0,0,0) 70%);transform:scale(.55);transition-property:transform;transition-timing-function:ease-in-out}
+  .phase{font-size:16px;color:var(--red-soft);height:24px;letter-spacing:.08em}
+  .word{font-size:34px;font-weight:500;min-height:44px;transition:opacity 2s}
+  label{display:block;color:var(--red-soft);font-size:14px;margin:18px 0 8px}
+  input[type=range]{width:100%;accent-color:#800000}
+  #blank{position:fixed;inset:0;background:#000;z-index:50;display:none;align-items:flex-end;justify-content:center;padding-bottom:40px}
+  #blank.on{display:flex}
+  #blank span{color:var(--red-faint);font-size:13px;opacity:0;transition:opacity 1s}
+  #blank.peek span{opacity:1}
+  .list{white-space:pre-wrap;color:var(--red);border-left:1px solid var(--red-faint);padding-left:12px;margin:12px 0;flex:1;overflow:auto;user-select:text;-webkit-user-select:text}
+  .top{display:flex;justify-content:space-between;align-items:center}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<section class="screen" id="home">
+  <h1>sleepyhead</h1>
+  <p>Lower your screen brightness all the way. Turn on Do Not Disturb.</p>
+  <div class="menu">
+    <button class="big" data-go="flow">Wind down<small>Brain dump → breathe → drift off</small></button>
+    <button data-go="dump">Brain dump<small>Put tomorrow on paper, not in your head</small></button>
+    <button data-go="breathe">Breathe<small>Slow pacer, eyes closed</small></button>
+    <button data-go="shuffle">Shuffle<small>Random calm words to drift on</small></button>
+    <button data-go="sound">Sounds<small>Noise and drones that fade out</small></button>
+    <button id="morningBtn" data-go="morning" style="display:none">Last night's list</button>
+  </div>
+  <div class="grow"></div>
+  <button class="plain" data-go="settings">dimmer · settings</button>
+</section>
+
+<!-- BRAIN DUMP -->
+<section class="screen" id="dump">
+  <div class="top"><h2>Brain dump</h2><button class="plain" data-back>close</button></div>
+  <p>What do you need to do in the next few days? Be specific. About five minutes.</p>
+  <textarea id="dumpText" placeholder="call the supplier about…&#10;pay…&#10;reply to…"></textarea>
+  <p id="dumpNudge" style="opacity:0;transition:opacity 3s">That's enough. It will be here in the morning.</p>
+  <button class="big" id="dumpDone" style="text-align:center">Done</button>
+</section>
+
+<!-- BREATHE -->
+<section class="screen" id="breathe">
+  <div class="top"><h2>Breathe</h2><button class="plain" data-stop>stop</button></div>
+  <div id="breatheSetup">
+    <label>Pattern</label>
+    <div class="row" id="patternRow">
+      <button data-v="slow" class="sel">Slow 4·6</button>
+      <button data-v="478">4·7·8</button>
+      <button data-v="box">Box</button>
+    </div>
+    <label>Length</label>
+    <div class="row" id="breathLenRow">
+      <button data-v="5">5 min</button>
+      <button data-v="10" class="sel">10 min</button>
+      <button data-v="20">20 min</button>
+    </div>
+    <p style="margin-top:18px">Close your eyes. Soft tones and taps guide you. The screen goes dark after a minute.</p>
+    <div class="grow"></div>
+    <button class="big" id="breatheStart" style="text-align:center;margin-top:24px">Begin</button>
+  </div>
+  <div class="center" id="breatheRun" style="display:none">
+    <div class="orb" id="orb"></div>
+    <div class="phase" id="phase"></div>
+  </div>
+</section>
+
+<!-- SHUFFLE -->
+<section class="screen" id="shuffle">
+  <div class="top"><h2>Shuffle</h2><button class="plain" data-stop>stop</button></div>
+  <div id="shuffleSetup">
+    <p>A slow voice says a random, harmless word every few seconds. Picture each one briefly, then let it go. Don't follow any story.</p>
+    <label>Mode</label>
+    <div class="row" id="shuffleModeRow">
+      <button data-v="words" class="sel">Words</button>
+      <button data-v="scene">Calm scene</button>
+    </div>
+    <label>Length</label>
+    <div class="row" id="shuffleLenRow">
+      <button data-v="15">15 min</button>
+      <button data-v="30" class="sel">30 min</button>
+    </div>
+    <label>Soft noise underneath</label>
+    <div class="row" id="shuffleBedRow">
+      <button data-v="none" class="sel">None</button>
+      <button data-v="brown">Brown</button>
+      <button data-v="rain">Rain</button>
+    </div>
+    <div class="grow"></div>
+    <button class="big" id="shuffleStart" style="text-align:center;margin-top:24px">Begin</button>
+  </div>
+  <div class="center" id="shuffleRun" style="display:none">
+    <div class="word" id="word"></div>
+  </div>
+</section>
+
+<!-- SOUND -->
+<section class="screen" id="sound">
+  <div class="top"><h2>Sounds</h2><button class="plain" data-stop>stop</button></div>
+  <label>Sound</label>
+  <div class="row" id="soundRow">
+    <button data-v="brown" class="sel">Brown</button>
+    <button data-v="pink">Pink</button>
+    <button data-v="rain">Rain</button>
+    <button data-v="drone">Drone</button>
+  </div>
+  <label>Fades out after</label>
+  <div class="row" id="soundLenRow">
+    <button data-v="30">30 min</button>
+    <button data-v="45" class="sel">45 min</button>
+    <button data-v="0">All night</button>
+  </div>
+  <label>Volume (kept low on purpose)</label>
+  <input type="range" id="vol" min="0.02" max="0.5" step="0.01" value="0.2">
+  <p style="margin-top:14px">"All night" is only for masking a noisy room.</p>
+  <div class="grow"></div>
+  <button class="big" id="soundStart" style="text-align:center">Play</button>
+</section>
+
+<!-- CAN'T SLEEP -->
+<section class="screen" id="cantsleep">
+  <h2>Still awake?</h2>
+  <p>That's okay. Lying there trying harder doesn't work. Get up, sit somewhere dim, and listen to this until you feel sleepy. Then go back to bed.</p>
+  <div class="menu">
+    <button class="big" id="cantShuffle">Play shuffle words<small>Audio only, screen goes dark</small></button>
+    <button id="cantBreathe">Slow breathing</button>
+    <button data-go="home">I'm fine, take me home</button>
+  </div>
+</section>
+
+<!-- MORNING -->
+<section class="screen" id="morning">
+  <div class="top"><h2>Last night's list</h2><button class="plain" data-back>close</button></div>
+  <div class="list" id="morningList"></div>
+  <button id="clearList">Clear list</button>
+</section>
+
+<!-- SETTINGS -->
+<section class="screen" id="settings">
+  <div class="top"><h2>Settings</h2><button class="plain" data-back>close</button></div>
+  <label>Text brightness</label>
+  <input type="range" id="dimSlider" min="0.4" max="1" step="0.05" value="0.85">
+  <label>Haptics</label>
+  <div class="row" id="hapticRow">
+    <button data-v="on" class="sel">On</button>
+    <button data-v="off">Off</button>
+  </div>
+  <label>Voice speed</label>
+  <input type="range" id="rateSlider" min="0.5" max="0.9" step="0.05" value="0.7">
+  <p style="margin-top:24px">Everything here is red on black. No notifications, no streaks, no clock. This app is designed around techniques shown to calm the mind before sleep. It isn't medical treatment.</p>
+</section>
+
+<div id="blank"><span>tap to show · double‑tap to stop</span></div>
+
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData !== undefined ? window.Telegram.WebApp : null;
+
+/* ---------- Telegram setup ---------- */
+if (tg) {
+  try {
+    tg.ready(); tg.expand();
+    // Full screen (Bot API 8.0+). Older Telegram clients fall back to expanded mode.
+    if (tg.isVersionAtLeast && tg.isVersionAtLeast("8.0")) {
+      if (!tg.isFullscreen) tg.requestFullscreen();
+      tg.lockOrientation && tg.lockOrientation();          // stay portrait in bed
+      tg.onEvent && tg.onEvent("fullscreenFailed", () => tg.expand());
+    }
+    tg.setHeaderColor && tg.setHeaderColor("#000000");
+    tg.setBackgroundColor && tg.setBackgroundColor("#000000");
+    tg.setBottomBarColor && tg.setBottomBarColor("#000000");
+    tg.disableVerticalSwipes && tg.disableVerticalSwipes();
+    tg.BackButton && tg.BackButton.onClick(() => back());
+  } catch (e) {}
+}
+
+/* ---------- storage (localStorage + Telegram CloudStorage) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("sh_" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) {
+    try { localStorage.setItem("sh_" + k, JSON.stringify(v)); } catch (e) {}
+    try { tg && tg.CloudStorage && tg.CloudStorage.setItem("sh_" + k, JSON.stringify(v)); } catch (e) {}
+  }
+};
+
+/* ---------- settings ---------- */
+const applyDim = v => document.documentElement.style.setProperty("--dim", v);
+let dim = store.get("dim2", 0.85), rate = store.get("rate", 0.7);
+applyDim(dim); $("#dimSlider").value = dim; $("#rateSlider").value = rate;
+$("#dimSlider").oninput = e => { dim = +e.target.value; applyDim(dim); store.set("dim2", dim); };
+$("#rateSlider").oninput = e => { rate = +e.target.value; store.set("rate", rate); };
+
+/* ---------- haptics ---------- */
+/* Haptics: Telegram SDK → raw Telegram bridge → Android vibrate. iPhone browsers outside Telegram have no vibration API. */
+let haptics = store.get("haptics", true);
+const VIB = { soft: 12, light: 18, medium: 30, heavy: 45, rigid: 20, select: 8, success: [20, 60, 20] };
+function tgRaw(payload) {
+  try {
+    const data = JSON.stringify(payload);
+    if (window.TelegramWebviewProxy) { window.TelegramWebviewProxy.postEvent("web_app_trigger_haptic_feedback", data); return true; }
+    if (window.external && window.external.notify) { window.external.notify(JSON.stringify({ eventType: "web_app_trigger_haptic_feedback", eventData: payload })); return true; }
+  } catch (e) {}
+  return false;
+}
+function tap(kind = "soft") {
+  if (!haptics) return;
+  try {
+    if (tg && tg.HapticFeedback) {
+      if (kind === "select") tg.HapticFeedback.selectionChanged();
+      else if (kind === "success") tg.HapticFeedback.notificationOccurred("success");
+      else tg.HapticFeedback.impactOccurred(kind);
+      return;
+    }
+  } catch (e) {}
+  const p = kind === "select" ? { type: "selection_change" } : kind === "success" ? { type: "notification", notification_type: "success" } : { type: "impact", impact_style: kind };
+  if (tgRaw(p)) return;
+  try { navigator.vibrate && navigator.vibrate(VIB[kind] || 15); } catch (e) {}
+}
+/* A gentle train of pulses across a breath phase, so you can follow it with eyes closed. */
+function pulseTrain(sec, every, kind) {
+  for (let t = every; t < sec - 0.3; t += every) intervalIds.push(setTimeout(() => tap(kind), t * 1000));
+}
+document.addEventListener("click", e => { if (e.target.closest("button")) tap("select"); }, true);
+$("#hapticRow").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  haptics = b.dataset.v === "on"; store.set("haptics", haptics); if (haptics) tap("medium");
+});
+if (!haptics) { $$("#hapticRow button").forEach(b => b.classList.toggle("sel", b.dataset.v === "off")); }
+
+/* ---------- navigation ---------- */
+let current = null, history = [];
+function go(id, push = true) {
+  if (current === id) return;
+  const prev = current && $("#" + current);
+  if (prev) { prev.classList.remove("show"); setTimeout(() => prev.classList.remove("on"), 300); }
+  if (push && current) history.push(current);
+  current = id;
+  const el = $("#" + id);
+  setTimeout(() => { el.classList.add("on"); requestAnimationFrame(() => el.classList.add("show")); }, prev ? 300 : 0);
+  if (tg && tg.BackButton) { id === "home" ? tg.BackButton.hide() : tg.BackButton.show(); }
+  if (id === "home") refreshHome();
+}
+function back() { stopAll(); go(history.pop() || "home", false); if (current === "home") history = []; }
+$$("[data-go]").forEach(b => b.onclick = () => {
+  const t = b.dataset.go;
+  if (t === "flow") { flow = true; go("dump"); return; }
+  flow = false; go(t);
+});
+$$("[data-back]").forEach(b => b.onclick = back);
+$$("[data-stop]").forEach(b => b.onclick = () => { stopAll(); go("home", false); history = []; });
+
+/* segmented buttons */
+function seg(rowId) {
+  const row = $("#" + rowId);
+  row.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    row.querySelectorAll("button").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
+  });
+  return () => row.querySelector(".sel").dataset.v;
+}
+const getPattern = seg("patternRow"), getBreathLen = seg("breathLenRow");
+const getShuffleMode = seg("shuffleModeRow"), getShuffleLen = seg("shuffleLenRow"), getShuffleBed = seg("shuffleBedRow");
+const getSound = seg("soundRow"), getSoundLen = seg("soundLenRow");
+
+/* ---------- blank screen ---------- */
+let blankTimer = null, peekTimer = null, lastTap = 0;
+function scheduleBlank(ms = 60000) { clearTimeout(blankTimer); blankTimer = setTimeout(() => $("#blank").classList.add("on"), ms); }
+function unblank() { clearTimeout(blankTimer); $("#blank").classList.remove("on", "peek"); }
+$("#blank").addEventListener("click", () => {
+  const now = Date.now();
+  if (now - lastTap < 400) { stopAll(); go("home", false); history = []; return; }
+  lastTap = now;
+  const b = $("#blank"); b.classList.add("peek");
+  clearTimeout(peekTimer); peekTimer = setTimeout(() => b.classList.remove("peek"), 2500);
+});
+
+/* ---------- session bookkeeping (for can't-sleep detection) ---------- */
+function markSession() { store.set("lastSession", Date.now()); }
+
+/* ---------- audio engine ---------- */
+let onEnd = null, ctx = null, master = null, sources = [], endTimer = null, intervalIds = [];
+function audio() {
+  if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+  if (ctx.state === "suspended") ctx.resume();
+  return ctx;
+}
+function newMaster(vol) {
+  audio();
+  master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+  master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 8); // slow fade-in
+  return master;
+}
+function scheduleFade(totalSec, fadeSec) {
+  if (!totalSec) return;
+  const t0 = ctx.currentTime, start = t0 + Math.max(0, totalSec - fadeSec);
+  master.gain.setValueAtTime(master.gain.value || 0.0001, start);
+  master.gain.linearRampToValueAtTime(0.0001, t0 + totalSec);
+  endTimer = setTimeout(() => {
+    const next = onEnd; onEnd = null; stopAll();
+    if (next) next(); else { go("home", false); history = []; }
+  }, totalSec * 1000 + 500);
+}
+function noiseBuffer(type) {
+  const len = ctx.sampleRate * 10, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0,last=0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    if (type === "brown") { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+    else { // pink (Paul Kellet)
+      b0=.99886*b0+w*.0555179; b1=.99332*b1+w*.0750759; b2=.969*b2+w*.153852;
+      b3=.8665*b3+w*.3104856; b4=.55*b4+w*.5329522; b5=-.7616*b5-w*.016898;
+      d[i]=(b0+b1+b2+b3+b4+b5+b6+w*.5362)*.11; b6=w*.115926;
+    }
+  }
+  // crossfade loop edge
+  const f = 2000; for (let i = 0; i < f; i++) { const a = i / f; d[len - f + i] = d[len - f + i] * (1 - a) + d[i] * a; }
+  return buf;
+}
+function playNoise(type, out) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(type === "rain" ? "pink" : type); src.loop = true;
+  let node = src;
+  if (type === "rain") {
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 400;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2500;
+    const g = ctx.createGain(); g.gain.value = 0.9;
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.07; lg.gain.value = 0.15;
+    lfo.connect(lg); lg.connect(g.gain); lfo.start(); sources.push(lfo);
+    src.connect(hp); hp.connect(lp); lp.connect(g); node = g;
+  } else if (type === "brown") {
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 500;
+    src.connect(lp); node = lp;
+  }
+  node.connect(out); src.start(); sources.push(src);
+}
+function playDrone(out) {
+  // Slow, low, consonant drone (A2, E3, A3) with very slow swells
+  [[110, 0.5], [164.81, 0.3], [220, 0.18], [110.4, 0.35]].forEach(([f, v], i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+    o.type = "sine"; o.frequency.value = f; g.gain.value = v * 0.5;
+    lfo.frequency.value = 0.03 + i * 0.017; lg.gain.value = v * 0.4;
+    lfo.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(out);
+    o.start(); lfo.start(); sources.push(o, lfo);
+  });
+}
+function tone(freq, dur) {
+  if (!ctx || !master) return;
+  const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+  o.type = "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.35, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.min(dur, 2.5));
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + Math.min(dur, 2.5) + 0.1);
+}
+function stopAll() {
+  clearTimeout(endTimer); onEnd = null; intervalIds.forEach(clearTimeout); intervalIds = [];
+  sources.forEach(s => { try { s.stop(); } catch (e) {} }); sources = [];
+  if (master && ctx) { const m = master; try { m.gain.cancelScheduledValues(ctx.currentTime); m.gain.setTargetAtTime(0, ctx.currentTime, 0.3); } catch (e) {} setTimeout(() => { try { m.disconnect(); } catch (e) {} }, 1500); }
+  master = null;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  unblank(); releaseWake();
+  breatheRunning = false;
+  $("#breatheSetup").style.display = ""; $("#breatheRun").style.display = "none";
+  $("#shuffleSetup").style.display = ""; $("#shuffleRun").style.display = "none";
+}
+/* Keep audio running: wake lock only while screen is blanked black (pure black = OLED pixels off). */
+let wake = null;
+async function holdWake() { try { wake = await navigator.wakeLock.request("screen"); } catch (e) {} }
+function releaseWake() { try { wake && wake.release(); } catch (e) {} wake = null; }
+
+/* ---------- BRAIN DUMP ---------- */
+let flow = false, dumpTimer = null;
+$('[data-go="dump"]').addEventListener("click", startDump);
+function startDump() {
+  $("#dumpText").value = ""; $("#dumpNudge").style.opacity = 0;
+  clearTimeout(dumpTimer); dumpTimer = setTimeout(() => $("#dumpNudge").style.opacity = 1, 5 * 60000);
+}
+$('[data-go="flow"]').addEventListener("click", startDump);
+$("#dumpDone").onclick = () => {
+  clearTimeout(dumpTimer);
+  const t = $("#dumpText").value.trim();
+  if (t) store.set("list", { text: t, at: Date.now() });
+  $("#dumpText").blur(); tap("success");
+  if (flow) { go("breathe"); } else { go("home", false); history = []; }
+};
+
+/* ---------- BREATHE ---------- */
+let breatheRunning = false;
+const orb = $("#orb"), phaseEl = $("#phase");
+function setOrb(scale, sec) { orb.style.transitionDuration = sec + "s"; orb.style.transform = `scale(${scale})`; }
+$("#breatheStart").onclick = () => startBreathe(getPattern(), +getBreathLen());
+function startBreathe(pattern, minutes) {
+  stopAll();
+  newMaster(0.25); holdWake(); markSession();
+  $("#breatheSetup").style.display = "none"; $("#breatheRun").style.display = "flex";
+  breatheRunning = true;
+  const t0 = Date.now(), total = minutes * 60;
+  let cycles478 = 0;
+  scheduleFade(total, Math.min(60, total * 0.2));
+  if (flow) onEnd = () => { flow = false; go("shuffle"); startShuffle("words", 30, "brown"); };
+  scheduleBlank(60000);
+  function phase(name, sec, scale, freq) {
+    if (!breatheRunning) return;
+    phaseEl.textContent = name; setOrb(scale, sec); tone(freq, sec);
+    if (name === "in") { tap("medium"); pulseTrain(sec, 1, "soft"); }        // rising: steady 1s pulses
+    else if (name === "out") { tap("light"); pulseTrain(sec, 2, "soft"); }   // falling: slower pulses
+    else tap("rigid");                                                       // hold: single marker
+    return new Promise(r => intervalIds.push(setTimeout(r, sec * 1000)));
+  }
+  (async function loop() {
+    while (breatheRunning) {
+      const el = (Date.now() - t0) / 1000;
+      let p = pattern;
+      if (p === "478" && cycles478 >= 4) p = "slow";
+      if (p === "slow") {
+        // Start near 7.5 breaths/min, ease down to 6/min over the first 2 minutes
+        const k = Math.min(el / 120, 1), cyc = 8 + 2 * k;
+        await phase("in", cyc * 0.4, 1, 196);
+        await phase("out", cyc * 0.6, 0.55, 147);
+      } else if (p === "478") {
+        await phase("in", 4, 1, 196); await phase("hold", 7, 1, 175); await phase("out", 8, 0.55, 147); cycles478++;
+      } else {
+        await phase("in", 4, 1, 196); await phase("hold", 4, 1, 175); await phase("out", 4, 0.55, 147); await phase("hold", 4, 0.55, 131);
+      }
+    }
+  })();
+}
+
+/* ---------- SHUFFLE ---------- */
+const WORDS = ("lamp meadow teacup pebble feather cloud orchard pillow candle river blanket acorn harbor lantern violin " +
+ "walnut snowflake hammock garden kettle moss willow shell sailboat apricot quilt pond fern velvet barn " +
+ "pinecone saucer cabin owl wool honey bridge lighthouse daisy marble canoe chimney biscuit compass tulip " +
+ "porch stream basket mitten cello hilltop puddle cotton sparrow lily dune fireplace cinnamon wheat " +
+ "seashell rowboat oak scarf kitten tea peach fog lagoon spoon slipper rug cedar meadowlark plum " +
+ "bookshelf orchid hay sandcastle bell feather duvet cottage valley moonlight raindrop pear clover " +
+ "anchor nest bread mushroom lavender gondola pottery firefly jar ribbon violet sled windmill thimble " +
+ "drum pumpkin cushion seagull orchard grape breeze bench rose pine lemon trail mug cradle maple " +
+ "glacier swan flute pasture olive blossom brook pocket button raft star gate tortoise bamboo " +
+ "carpet shore tangerine snowman cupboard reed kite almond lake leaf zebra wave cherry curtain").split(" ");
+const SCENE = [
+  "You are lying in a small boat on a still lake.",
+  "The water is quiet. The boat rocks very gently.",
+  "Above you, a few soft clouds move slowly.",
+  "The air is cool, and smells faintly of pine.",
+  "Somewhere far away, a bird calls once, then is quiet.",
+  "Your hands rest on a warm wool blanket.",
+  "The boat drifts toward the reeds, very slowly.",
+  "Small ripples spread out and disappear.",
+  "The light is turning golden, then soft blue.",
+  "There is nothing to do here. Nowhere to be.",
+  "The boat touches the soft bank and stays.",
+  "You can hear the reeds moving in the breeze.",
+  "Stars begin to appear, one at a time.",
+  "The water holds the boat, and the boat holds you."
+];
+let voice = null;
+function pickVoice() {
+  try {
+    const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+    voice = vs.find(v => /samantha|serena|karen|moira|female|google uk english female/i.test(v.name)) || vs[0] || null;
+  } catch (e) {}
+}
+try { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; } catch (e) {}
+function say(text, vol) {
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.rate = rate; u.pitch = 0.8; u.volume = Math.max(0.05, vol);
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+$("#shuffleStart").onclick = () => startShuffle(getShuffleMode(), +getShuffleLen(), getShuffleBed());
+function startShuffle(mode, minutes, bed) {
+  stopAll();
+  newMaster(0.15); holdWake(); markSession();
+  if (bed !== "none") playNoise(bed, master);
+  $("#shuffleSetup").style.display = "none"; $("#shuffleRun").style.display = "flex";
+  const total = minutes * 60, fade = 5 * 60, t0 = Date.now();
+  scheduleFade(total, fade);
+  scheduleBlank(60000);
+  let bag = [], si = 0;
+  const wordEl = $("#word");
+  const step = () => {
+    const el = (Date.now() - t0) / 1000;
+    if (el > total) return;
+    const vol = el > total - fade ? Math.max(0.1, (total - el) / fade) : 1;
+    let text, isScene = false;
+    if (mode === "scene" && si < SCENE.length) { text = SCENE[si++]; isScene = true; }
+    else {
+      if (!bag.length) bag = WORDS.slice().sort(() => Math.random() - 0.5);
+      text = bag.pop();
+    }
+    wordEl.style.opacity = 0;
+    setTimeout(() => { wordEl.textContent = isScene ? "" : text; wordEl.style.opacity = 1; }, 600);
+    say(text, vol); tap("soft");
+    // scene lines every ~20s, then words every 8s
+    intervalIds.push(setTimeout(step, isScene ? 20000 : 8000));
+  };
+  intervalIds.push(setTimeout(step, 2500));
+}
+
+/* ---------- SOUNDS ---------- */
+$("#soundStart").onclick = () => {
+  stopAll();
+  const type = getSound(), mins = +getSoundLen(), vol = +$("#vol").value;
+  newMaster(vol); holdWake(); markSession();
+  type === "drone" ? playDrone(master) : playNoise(type, master);
+  if (mins) scheduleFade(mins * 60, 10 * 60);
+  $("#blank").classList.add("on"); // straight to dark
+};
+$("#vol").oninput = e => { if (master && ctx) master.gain.setTargetAtTime(+e.target.value, ctx.currentTime, 0.5); };
+
+/* ---------- CAN'T SLEEP ---------- */
+$("#cantShuffle").onclick = () => { go("shuffle"); startShuffle("words", 30, "none"); };
+$("#cantBreathe").onclick = () => { go("breathe"); startBreathe("slow", 10); };
+
+/* ---------- MORNING LIST ---------- */
+function refreshHome() {
+  const l = store.get("list", null);
+  $("#morningBtn").style.display = l && l.text ? "" : "none";
+}
+$('[data-go="morning"]').addEventListener("click", () => {
+  const l = store.get("list", null); $("#morningList").textContent = l ? l.text : "";
+});
+$("#clearList").onclick = () => { store.set("list", null); back(); };
+
+/* ---------- start ---------- */
+const last = store.get("lastSession", 0), since = Date.now() - last;
+if (last && since > 20 * 60000 && since < 6 * 3600000) go("cantsleep"); else go("home");
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && ctx && ctx.state === "suspended" && master) ctx.resume();
+});
+})();
+</script>
+</body>
+</html>
