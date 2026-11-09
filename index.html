@@ -13,6 +13,7 @@
     --red:rgba(255,0,0,var(--dim));
     --red-soft:rgba(255,0,0,calc(var(--dim)*.72));
     --red-faint:rgba(255,0,0,calc(var(--dim)*.38));
+    --line:rgba(255,0,0,calc(var(--dim)*.45));
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{background:#000;color:var(--red);height:100%;overflow:hidden}
@@ -22,7 +23,10 @@
     padding-top:max(24px,env(safe-area-inset-top),calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px) + 12px));
     padding-bottom:max(24px,env(safe-area-inset-bottom),calc(var(--tg-safe-area-inset-bottom,0px) + var(--tg-content-safe-area-inset-bottom,0px) + 12px));
     padding-left:max(20px,env(safe-area-inset-left),var(--tg-safe-area-inset-left,0px));
-    padding-right:max(20px,env(safe-area-inset-right),var(--tg-safe-area-inset-right,0px));opacity:0;transition:opacity 1.2s ease}
+    padding-right:max(20px,env(safe-area-inset-right),var(--tg-safe-area-inset-right,0px));opacity:0;transition:opacity 1.2s ease;
+    overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .screen>*{flex-shrink:0}
+  .screen>.grow,.screen>.center,.screen>textarea,.screen>.list{flex-shrink:1}
   .screen.on{display:flex}
   .screen.show{opacity:1}
   h1{font-weight:500;font-size:28px;letter-spacing:.04em;margin-bottom:6px}
@@ -30,14 +34,15 @@
   p,.hint{color:var(--red-soft);font-size:16px}
   .grow{flex:1}
   .menu{display:flex;flex-direction:column;gap:12px;margin-top:28px}
-  button,.btn{background:none;border:1px solid var(--red-faint);color:var(--red);font:inherit;border-radius:14px;padding:16px 18px;text-align:left;cursor:pointer;width:100%}
+  button,.btn{background:none;border:1.5px solid var(--line);color:var(--red);font:inherit;border-radius:16px;padding:16px 18px;text-align:left;cursor:pointer;width:100%;transition:background .3s,transform .15s}
+  button:active{transform:scale(.985);background:rgba(255,0,0,calc(var(--dim)*.1))}
   button small{display:block;color:var(--red-soft);font-size:15px;margin-top:2px}
-  button.big{font-size:20px;padding:22px 18px;border-color:var(--red-soft)}
+  button.big{font-size:20px;padding:22px 18px;background:rgba(255,0,0,calc(var(--dim)*.08))}
   button.plain{border:none;padding:10px 0;color:var(--red-soft);width:auto}
   .row{display:flex;gap:10px}
   .row button{text-align:center;padding:12px 6px}
   .row button.sel{border-color:var(--red);background:rgba(255,0,0,calc(var(--dim)*.12))}
-  textarea{flex:1;background:#000;border:1px solid var(--red-faint);border-radius:14px;color:var(--red);font:inherit;padding:14px;resize:none;outline:none;margin:12px 0;caret-color:var(--red);user-select:text;-webkit-user-select:text}
+  textarea{flex:1;min-height:180px;background:#000;border:1.5px solid var(--line);border-radius:16px;color:var(--red);font:inherit;padding:14px;resize:none;outline:none;margin:12px 0;caret-color:var(--red);user-select:text;-webkit-user-select:text}
   textarea::placeholder{color:var(--red-faint)}
   .center{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px}
   .orb{width:46vmin;height:46vmin;max-width:260px;max-height:260px;border-radius:50%;border:1px solid var(--red-soft);background:radial-gradient(circle,rgba(255,0,0,calc(var(--dim)*.25)) 0%,rgba(0,0,0,0) 70%);transform:scale(.55);transition-property:transform;transition-timing-function:ease-in-out}
@@ -51,6 +56,12 @@
   #blank.peek span{opacity:1}
   .list{white-space:pre-wrap;color:var(--red);border-left:1px solid var(--red-faint);padding-left:12px;margin:12px 0;flex:1;overflow:auto;user-select:text;-webkit-user-select:text}
   .top{display:flex;justify-content:space-between;align-items:center}
+  .field{position:relative;width:100%;max-width:420px;height:220px;margin:0 auto;overflow:hidden;transition:opacity 60s linear}
+  .field .ground{position:absolute;left:0;right:0;bottom:30px;border-top:1.5px solid var(--red-faint)}
+  .field .fence{position:absolute;left:50%;bottom:30px;width:44px;height:52px;margin-left:-22px}
+  .sheep{position:absolute;left:0;bottom:31px;width:64px;height:48px;will-change:transform}
+  .count{font-size:44px;font-weight:300;text-align:center;font-variant-numeric:tabular-nums;color:var(--red-soft);min-height:60px;transition:opacity 1.5s}
+  @media (prefers-reduced-motion:reduce){.screen{transition:none}}
 </style>
 </head>
 <body>
@@ -64,6 +75,7 @@
     <button data-go="dump">Brain dump<small>Put tomorrow on paper, not in your head</small></button>
     <button data-go="breathe">Breathe<small>Slow pacer, eyes closed</small></button>
     <button data-go="shuffle">Shuffle<small>Random calm words to drift on</small></button>
+    <button data-go="sheep">Count sheep<small>They come when they come. Wait for the next one…</small></button>
     <button data-go="sound">Sounds<small>Noise and drones that fade out</small></button>
     <button id="morningBtn" data-go="morning" style="display:none">Last night's list</button>
   </div>
@@ -132,6 +144,41 @@
   </div>
   <div class="center" id="shuffleRun" style="display:none">
     <div class="word" id="word"></div>
+  </div>
+</section>
+
+<!-- SHEEP -->
+<section class="screen" id="sheep">
+  <div class="top"><h2>Count sheep</h2><button class="plain" data-stop>stop</button></div>
+  <div id="sheepSetup">
+    <p>Sheep jump the fence at random times, and the gaps slowly get longer. Just wait for the next one. You don't need to watch: each jump has a soft tap and a quiet count.</p>
+    <label>Length</label>
+    <div class="row" id="sheepLenRow">
+      <button data-v="15">15 min</button>
+      <button data-v="30" class="sel">30 min</button>
+    </div>
+    <label>Count out loud</label>
+    <div class="row" id="sheepVoiceRow">
+      <button data-v="on" class="sel">Whisper</button>
+      <button data-v="off">Silent</button>
+    </div>
+    <label>Soft noise underneath</label>
+    <div class="row" id="sheepBedRow">
+      <button data-v="none">None</button>
+      <button data-v="brown" class="sel">Brown</button>
+      <button data-v="rain">Rain</button>
+    </div>
+    <div class="grow"></div>
+    <button class="big" id="sheepStart" style="text-align:center;margin-top:24px">Begin</button>
+  </div>
+  <div class="center" id="sheepRun" style="display:none">
+    <div class="field" id="field">
+      <div class="ground"></div>
+      <svg class="fence" viewBox="0 0 44 52" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--red-soft)">
+        <path d="M6 52V8M38 52V8M2 20h40M2 36h40"/>
+      </svg>
+    </div>
+    <div class="count" id="sheepCount"></div>
   </div>
 </section>
 
@@ -264,7 +311,24 @@ function tap(kind = "soft") {
 function pulseTrain(sec, every, kind) {
   for (let t = every; t < sec - 0.3; t += every) intervalIds.push(setTimeout(() => tap(kind), t * 1000));
 }
-document.addEventListener("click", e => { if (e.target.closest("button")) tap("select"); }, true);
+/* Breath wave: inhale = pulses get closer and stronger (like filling up),
+   exhale = pulses spread out and fade (like letting go). */
+const RISE = ["soft", "soft", "light", "light", "medium", "medium"];
+function breathWave(sec, rising) {
+  const n = Math.max(3, Math.round(sec * 1.3));
+  for (let i = 0; i < n; i++) {
+    const x = (i + 1) / (n + 1);                       // 0..1 through the phase
+    const at = rising ? sec * Math.sqrt(x) : sec * x * x;    // rising: bunch up late; falling: spread out late
+    const lvl = rising ? x : 1 - x;
+    const kind = RISE[Math.min(RISE.length - 1, Math.floor(lvl * RISE.length))];
+    intervalIds.push(setTimeout(() => tap(kind), at * 1000));
+  }
+}
+/* Press feedback on touch-down feels much more physical than on click */
+document.addEventListener("pointerdown", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  tap(b.classList.contains("big") ? "medium" : "light");
+}, true);
 $("#hapticRow").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   haptics = b.dataset.v === "on"; store.set("haptics", haptics); if (haptics) tap("medium");
@@ -404,6 +468,8 @@ function stopAll() {
   breatheRunning = false;
   $("#breatheSetup").style.display = ""; $("#breatheRun").style.display = "none";
   $("#shuffleSetup").style.display = ""; $("#shuffleRun").style.display = "none";
+  $("#sheepSetup").style.display = ""; $("#sheepRun").style.display = "none";
+  $$("#field .sheep").forEach(x => x.remove());
 }
 /* Keep audio running: wake lock only while screen is blanked black (pure black = OLED pixels off). */
 let wake = null;
@@ -444,9 +510,9 @@ function startBreathe(pattern, minutes) {
   function phase(name, sec, scale, freq) {
     if (!breatheRunning) return;
     phaseEl.textContent = name; setOrb(scale, sec); tone(freq, sec);
-    if (name === "in") { tap("medium"); pulseTrain(sec, 1, "soft"); }        // rising: steady 1s pulses
-    else if (name === "out") { tap("light"); pulseTrain(sec, 2, "soft"); }   // falling: slower pulses
-    else tap("rigid");                                                       // hold: single marker
+    if (name === "in") { tap("heavy"); breathWave(sec, true); }
+    else if (name === "out") { tap("medium"); breathWave(sec, false); }
+    else { tap("rigid"); intervalIds.push(setTimeout(() => tap("rigid"), 180)); }   // hold: double knock
     return new Promise(r => intervalIds.push(setTimeout(r, sec * 1000)));
   }
   (async function loop() {
@@ -539,6 +605,69 @@ function startShuffle(mode, minutes, bed) {
     intervalIds.push(setTimeout(step, isScene ? 20000 : 8000));
   };
   intervalIds.push(setTimeout(step, 2500));
+}
+
+/* ---------- SHEEP ---------- */
+const getSheepLen = seg("sheepLenRow"), getSheepVoice = seg("sheepVoiceRow"), getSheepBed = seg("sheepBedRow");
+const SHEEP_SVG = `<svg viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M14 28c-5 0-7-6-3-9-1-5 5-8 9-5 2-5 10-5 12 0 4-3 10 0 9 5 5 1 5 8 0 9 1 4-4 7-8 5-3 3-9 3-12 0-4 2-8-1-7-5z" fill="currentColor" fill-opacity=".12"/>
+  <ellipse cx="50" cy="20" rx="6" ry="5"/><path d="M46 16l-2-3M54 16l2-3"/>
+  <path class="lg" d="M20 33v9M27 34v9M35 34v9M41 33v9"/>
+</svg>`;
+let sheepN = 0;
+function sheepGap(progress) {
+  // Unpredictable gaps that stretch out as the session goes on: ~3–9 s early, ~10–40 s late.
+  const base = 3 + 12 * progress * progress;
+  let gap = base + Math.random() * base * 1.6;
+  if (Math.random() < 0.15) gap += 8 + Math.random() * 12 * (0.3 + progress);   // occasional long wait
+  return gap;
+}
+function jumpSheep(speak, vol) {
+  const field = $("#field"), W = field.clientWidth;
+  const el = document.createElement("div");
+  el.className = "sheep"; el.innerHTML = SHEEP_SVG; el.style.color = "var(--red)";
+  field.appendChild(el);
+  const dur = 5200 + Math.random() * 1800;
+  const x0 = -70, x1 = W + 10, mid = W / 2 - 32, jumpH = 58 + Math.random() * 18;
+  const pts = [];
+  for (let i = 0; i <= 40; i++) {
+    const f = i / 40, x = x0 + (x1 - x0) * f;
+    const d = (x - mid) / 70;                                   // jump arc around the fence
+    const y = Math.abs(d) < 1 ? -jumpH * (1 - d * d) : -Math.abs(Math.sin(f * 40)) * 2;   // little trot bob
+    pts.push({ transform: `translate(${x}px,${y}px)`, offset: f });
+  }
+  const anim = el.animate(pts, { duration: dur, easing: "linear" });
+  // haptics: take-off, landing
+  const tTake = ((mid - 70 - x0) / (x1 - x0)) * dur, tLand = ((mid + 70 - x0) / (x1 - x0)) * dur;
+  intervalIds.push(setTimeout(() => tap("light"), tTake));
+  intervalIds.push(setTimeout(() => {
+    tap("soft");
+    sheepN++;
+    const c = $("#sheepCount"); c.style.opacity = 0;
+    setTimeout(() => { c.textContent = sheepN; c.style.opacity = 1; }, 300);
+    if (speak) say(String(sheepN), vol);
+  }, tLand));
+  anim.onfinish = () => el.remove();
+}
+$("#sheepStart").onclick = () => startSheep(+getSheepLen(), getSheepVoice() === "on", getSheepBed());
+function startSheep(minutes, speak, bed) {
+  stopAll();
+  newMaster(0.15); holdWake(); markSession();
+  if (bed !== "none") playNoise(bed, master);
+  sheepN = 0; $("#sheepCount").textContent = "";
+  $("#sheepSetup").style.display = "none"; $("#sheepRun").style.display = "flex";
+  const field = $("#field"); field.style.transition = "none"; field.style.opacity = 1;
+  requestAnimationFrame(() => { field.style.transition = ""; field.style.opacity = 0.35; });  // slowly dims over 60 s
+  const total = minutes * 60, fade = 5 * 60, t0 = Date.now();
+  scheduleFade(total, fade);
+  const next = () => {
+    const el = (Date.now() - t0) / 1000;
+    if (el > total - 10) return;
+    const vol = el > total - fade ? Math.max(0.1, (total - el) / fade) : 1;
+    jumpSheep(speak, vol * 0.8);
+    intervalIds.push(setTimeout(next, sheepGap(Math.min(el / total, 1)) * 1000));
+  };
+  intervalIds.push(setTimeout(next, 2500));
 }
 
 /* ---------- SOUNDS ---------- */
